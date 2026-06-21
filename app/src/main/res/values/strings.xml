@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">抖音广告跳过辅助</string>
+    <string name="accessibility_service_label">抖音广告跳过辅助</string>
+    <string name="accessibility_service_description">识别抖音中的广告、推广、赞助标识，并自动尝试跳过。</string>
+    <string name="home_description">开启无障碍服务后，本工具会在抖音界面检测广告/推广标识，优先点击跳过或关闭按钮，否则自动上滑到下一条视频。</string>
+    <string name="open_accessibility_settings">打开无障碍设置</string>
+    <string name="open_app_settings">打开应用设置</string>
+    <string name="service_enabled">服务状态：已开启</string>
+    <string name="service_disabled">服务状态：未开启</string>
+</resources>
