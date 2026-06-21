@@ -3,6 +3,7 @@ package com.yuhaojun.douyinadskipper;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityButtonController;
 import android.accessibilityservice.GestureDescription;
+import android.content.Intent;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
@@ -10,7 +11,6 @@ import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.widget.Toast;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -19,7 +19,7 @@ import java.util.Set;
 
 public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     private static final long ACTION_COOLDOWN_MS = 9000L;
-    private static final int MAX_NODES_TO_SCAN = 220;
+    private static final int MAX_NODES_TO_SCAN = 800;
 
     private static final Set<String> DOUYIN_PACKAGES = new HashSet<>(Arrays.asList(
             "com.ss.android.ugc.aweme",
@@ -34,11 +34,16 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
     private static final String[] CHAPTER_CONTEXT_KEYWORDS = {
             "章节",
+            "章节要点",
             "视频章节",
             "进度条",
+            "分段",
+            "分段点",
             "看点",
             "片段",
-            "时间轴"
+            "时间轴",
+            "上一章",
+            "下一章"
     };
 
     private static final String[] PROMOTION_CHAPTER_KEYWORDS = {
@@ -132,6 +137,10 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
             lastActionTime = now;
             seekPastPromotionChapter(result.markerBounds);
             Diagnostics.action(this, "检测到章节推广标记，拖动进度条");
+        } else if (result.hasChapterMarker()) {
+            lastActionTime = now;
+            seekPastPromotionChapter(result.markerBounds);
+            Diagnostics.action(this, "仅检测到章节分段，无推广标签，尝试跳到下一分段");
         }
     }
 
@@ -155,11 +164,9 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         accessibilityButtonCallback = new AccessibilityButtonController.AccessibilityButtonCallback() {
             @Override
             public void onClicked(AccessibilityButtonController controller) {
-                Toast.makeText(
-                        DouyinAdSkipAccessibilityService.this,
-                        Diagnostics.readSummary(DouyinAdSkipAccessibilityService.this),
-                        Toast.LENGTH_LONG
-                ).show();
+                Intent intent = new Intent(DouyinAdSkipAccessibilityService.this, DiagnosticsActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                startActivity(intent);
             }
 
             @Override
@@ -235,12 +242,17 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
                 if (!bounds.isEmpty()) {
                     result.markerBounds = bounds;
                 }
-                result.addSample(label);
+                result.addMatchedSample(label);
             }
             if (hasChapterContext) {
                 result.hasSeenChapterContext = true;
-                result.addSample(label);
+                result.chapterMarkerCount++;
+                if (!bounds.isEmpty()) {
+                    result.markerBounds = bounds;
+                }
+                result.addMatchedSample(label);
             }
+            result.addReadableSample(label);
         }
 
         int childCount = node.getChildCount();
@@ -328,32 +340,49 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     private static class DetectionResult {
         int scannedNodes;
         int promotionChapterCount;
+        int chapterMarkerCount;
         boolean hasSeenChapterContext;
         Rect markerBounds;
-        private final StringBuilder samples = new StringBuilder();
+        private final StringBuilder matchedSamples = new StringBuilder();
+        private final StringBuilder readableSamples = new StringBuilder();
 
         boolean hasPromotionChapter() {
             return promotionChapterCount > 0;
         }
 
-        void addSample(String label) {
-            if (samples.length() > 90 || label == null || label.isEmpty()) {
+        boolean hasChapterMarker() {
+            return chapterMarkerCount > 0;
+        }
+
+        void addMatchedSample(String label) {
+            appendSample(matchedSamples, label, 140);
+        }
+
+        void addReadableSample(String label) {
+            appendSample(readableSamples, label, 260);
+        }
+
+        private void appendSample(StringBuilder builder, String label, int limit) {
+            if (builder.length() > limit || label == null || label.isEmpty()) {
                 return;
             }
-            if (samples.length() > 0) {
-                samples.append(" | ");
+            if (builder.length() > 0) {
+                builder.append(" | ");
             }
-            samples.append(label);
+            builder.append(label);
         }
 
         String summary() {
             String marker = markerBounds == null ? "无坐标" : markerBounds.flattenToString();
-            String sampleText = samples.length() == 0 ? "无" : samples.toString();
+            String matchedText = matchedSamples.length() == 0 ? "无" : matchedSamples.toString();
+            String readableText = readableSamples.length() == 0 ? "无" : readableSamples.toString();
             return "扫描节点 " + scannedNodes
                     + "，章节上下文 " + (hasSeenChapterContext ? "有" : "无")
                     + "，推广章节 " + promotionChapterCount
+                    + "，章节标记 " + chapterMarkerCount
                     + "，标记坐标 " + marker
-                    + "，样本 " + sampleText;
+                    + "，命中样本 " + matchedText
+                    + "，可读样本 " + readableText;
         }
     }
 

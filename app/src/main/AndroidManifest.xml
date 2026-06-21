@@ -17,6 +17,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".DiagnosticsActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/DiagnosticsTheme" />
+
         <service
             android:name=".DouyinAdSkipAccessibilityService"
             android:description="@string/accessibility_service_description"

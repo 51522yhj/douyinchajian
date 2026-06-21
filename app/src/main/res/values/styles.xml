@@ -7,4 +7,10 @@
         <item name="android:navigationBarColor">#FAFAFA</item>
         <item name="android:colorAccent">#111827</item>
     </style>
+
+    <style name="DiagnosticsTheme" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">#111827</item>
+    </style>
 </resources>
