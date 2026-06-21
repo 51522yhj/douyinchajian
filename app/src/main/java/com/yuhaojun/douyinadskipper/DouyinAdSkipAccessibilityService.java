@@ -3,6 +3,7 @@ package com.yuhaojun.douyinadskipper;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
@@ -28,49 +29,38 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
             "关闭广告"
     };
 
-    private static final String[] STRONG_EMBEDDED_AD_KEYWORDS = {
-            "广告时间",
-            "本视频由",
-            "赞助播出",
-            "感谢赞助",
-            "品牌赞助",
-            "品牌合作",
-            "商务合作",
-            "商业合作",
-            "恰饭",
-            "接个广告",
-            "口播",
-            "小黄车",
-            "购物车",
-            "商品链接",
-            "购买链接",
-            "链接在下方",
-            "点击左下角",
-            "点击右下角",
-            "官方旗舰店",
-            "直播间同款"
+    private static final String[] CHAPTER_CONTEXT_KEYWORDS = {
+            "章节",
+            "视频章节",
+            "进度条",
+            "看点",
+            "片段",
+            "时间轴"
     };
 
-    private static final String[] WEAK_PROMOTION_KEYWORDS = {
-            "领券",
-            "优惠券",
-            "下单",
-            "购买",
-            "入手",
-            "同款",
-            "旗舰店",
-            "咨询",
-            "私信",
-            "课程",
-            "套餐",
-            "下载",
-            "安装",
-            "注册",
-            "试用",
-            "活动价",
-            "限时",
-            "福利",
-            "链接"
+    private static final String[] PROMOTION_CHAPTER_KEYWORDS = {
+            "推广内容",
+            "推广片段",
+            "广告片段",
+            "广告章节",
+            "营销片段",
+            "营销内容",
+            "商业推广",
+            "商品推荐",
+            "品牌推广",
+            "赞助内容",
+            "赞助片段",
+            "品牌合作",
+            "商务合作",
+            "商业合作"
+    };
+
+    private static final String[] CONTEXTUAL_PROMOTION_KEYWORDS = {
+            "广告",
+            "推广",
+            "赞助",
+            "营销",
+            "带货"
     };
 
     private long lastActionTime;
@@ -98,9 +88,9 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         DetectionResult result = new DetectionResult();
         collectSignals(root, result);
-        if (result.shouldSeekForward()) {
+        if (result.hasPromotionChapter()) {
             lastActionTime = now;
-            seekForwardInCurrentVideo();
+            seekPastPromotionChapter(result.markerBounds);
         }
     }
 
@@ -143,11 +133,20 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         String label = normalizeText(node);
         if (!label.isEmpty()) {
-            if (containsAny(label, STRONG_EMBEDDED_AD_KEYWORDS)) {
-                result.strongSignalCount++;
+            boolean hasChapterContext = containsAny(label, CHAPTER_CONTEXT_KEYWORDS);
+            Rect bounds = new Rect();
+            node.getBoundsInScreen(bounds);
+            boolean hasMarkerContext = hasChapterContext || result.hasSeenChapterContext || isLikelyProgressMarker(bounds);
+            boolean hasPromotionLabel = containsAny(label, PROMOTION_CHAPTER_KEYWORDS)
+                    || (hasMarkerContext && containsAny(label, CONTEXTUAL_PROMOTION_KEYWORDS));
+            if (hasPromotionLabel && hasMarkerContext) {
+                result.promotionChapterCount++;
+                if (!bounds.isEmpty()) {
+                    result.markerBounds = bounds;
+                }
             }
-            if (containsAny(label, WEAK_PROMOTION_KEYWORDS)) {
-                result.weakSignalCount++;
+            if (hasChapterContext) {
+                result.hasSeenChapterContext = true;
             }
         }
 
@@ -155,6 +154,16 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         for (int i = 0; i < childCount; i++) {
             collectSignals(node.getChild(i), result);
         }
+    }
+
+    private boolean isLikelyProgressMarker(Rect bounds) {
+        if (bounds == null || bounds.isEmpty()) {
+            return false;
+        }
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        return bounds.centerY() > metrics.heightPixels * 0.65f
+                && bounds.height() < metrics.heightPixels * 0.18f
+                && bounds.width() < metrics.widthPixels * 0.9f;
     }
 
     private boolean containsAny(String label, String[] keywords) {
@@ -197,11 +206,17 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         return null;
     }
 
-    private void seekForwardInCurrentVideo() {
+    private void seekPastPromotionChapter(Rect markerBounds) {
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         float y = metrics.heightPixels * 0.91f;
         float startX = metrics.widthPixels * 0.42f;
         float endX = metrics.widthPixels * 0.78f;
+
+        if (markerBounds != null && markerBounds.centerY() > metrics.heightPixels * 0.55f) {
+            y = markerBounds.centerY();
+            startX = Math.max(metrics.widthPixels * 0.08f, markerBounds.right + dp(6));
+            endX = Math.min(metrics.widthPixels * 0.94f, startX + metrics.widthPixels * 0.24f);
+        }
 
         Path path = new Path();
         path.moveTo(startX, y);
@@ -213,13 +228,18 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         dispatchGesture(gesture, null, null);
     }
 
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private static class DetectionResult {
         int scannedNodes;
-        int strongSignalCount;
-        int weakSignalCount;
+        int promotionChapterCount;
+        boolean hasSeenChapterContext;
+        Rect markerBounds;
 
-        boolean shouldSeekForward() {
-            return strongSignalCount >= 1 || weakSignalCount >= 2;
+        boolean hasPromotionChapter() {
+            return promotionChapterCount > 0;
         }
     }
 }
