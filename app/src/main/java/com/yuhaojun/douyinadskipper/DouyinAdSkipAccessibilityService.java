@@ -6,6 +6,8 @@ import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
@@ -80,6 +82,8 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     private long lastActionTime;
     private AccessibilityButtonController.AccessibilityButtonCallback accessibilityButtonCallback;
     private ViewGroup diagnosticsOverlay;
+    private Button diagnosticsShortcutOverlay;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -95,12 +99,14 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         Diagnostics.serviceState(this, "已连接");
         registerAccessibilityShortcutButton();
+        showDiagnosticsShortcutOverlay();
     }
 
     @Override
     public void onDestroy() {
         unregisterAccessibilityShortcutButton();
         hideDiagnosticsOverlay();
+        hideDiagnosticsShortcutOverlay();
         Diagnostics.serviceState(this, "已停止");
         super.onDestroy();
     }
@@ -148,11 +154,11 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         Diagnostics.scan(this, result.summary());
         if (result.hasPromotionChapter()) {
             lastActionTime = now;
-            seekPastPromotionChapter(result.markerBounds);
+            seekPastPromotionChapter(result.markerBounds, "推广章节");
             Diagnostics.action(this, "检测到章节推广标记，拖动进度条");
         } else if (result.hasChapterMarker()) {
             lastActionTime = now;
-            seekPastPromotionChapter(result.markerBounds);
+            seekPastPromotionChapter(result.markerBounds, "普通章节");
             Diagnostics.action(this, "仅检测到章节分段，无推广标签，尝试跳到下一分段");
         }
     }
@@ -204,6 +210,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     }
 
     private void showDiagnosticsOverlay() {
+        hideDiagnosticsShortcutOverlay();
         WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         if (windowManager == null) {
             Diagnostics.action(this, "无法显示诊断浮层：WindowManager 不可用");
@@ -229,6 +236,19 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+
+        Button testSeek = new Button(this);
+        testSeek.setText("测试跳段");
+        testSeek.setOnClickListener(v -> {
+            hideDiagnosticsOverlay();
+            handler.postDelayed(() -> seekPastPromotionChapter(null, "手动测试"), 250);
+        });
+        LinearLayout.LayoutParams testParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        testParams.setMargins(0, dp(10), 0, 0);
+        panel.addView(testSeek, testParams);
 
         Button close = new Button(this);
         close.setText("关闭诊断");
@@ -270,6 +290,55 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
             windowManager.removeView(diagnosticsOverlay);
         }
         diagnosticsOverlay = null;
+        showDiagnosticsShortcutOverlay();
+    }
+
+    private void showDiagnosticsShortcutOverlay() {
+        if (diagnosticsShortcutOverlay != null) {
+            return;
+        }
+
+        WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager == null) {
+            Diagnostics.action(this, "无法显示诊断按钮：WindowManager 不可用");
+            return;
+        }
+
+        Button button = new Button(this);
+        button.setText("诊");
+        button.setTextSize(16);
+        button.setTextColor(0xFFFFFFFF);
+        button.setBackgroundColor(0xAA111827);
+        button.setOnClickListener(v -> toggleDiagnosticsOverlay());
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                dp(52),
+                dp(52),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                android.graphics.PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
+
+        diagnosticsShortcutOverlay = button;
+        try {
+            windowManager.addView(diagnosticsShortcutOverlay, params);
+            Diagnostics.action(this, "诊断快捷按钮已显示");
+        } catch (Throwable throwable) {
+            diagnosticsShortcutOverlay = null;
+            Diagnostics.error(this, throwable);
+        }
+    }
+
+    private void hideDiagnosticsShortcutOverlay() {
+        if (diagnosticsShortcutOverlay == null) {
+            return;
+        }
+        WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager != null) {
+            windowManager.removeView(diagnosticsShortcutOverlay);
+        }
+        diagnosticsShortcutOverlay = null;
     }
 
     private void unregisterAccessibilityShortcutButton() {
@@ -403,26 +472,36 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         return null;
     }
 
-    private void seekPastPromotionChapter(Rect markerBounds) {
+    private void seekPastPromotionChapter(Rect markerBounds, String reason) {
         DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float y = metrics.heightPixels * 0.91f;
-        float startX = metrics.widthPixels * 0.42f;
-        float endX = metrics.widthPixels * 0.78f;
+        float y = metrics.heightPixels * 0.925f;
+        float startX = metrics.widthPixels * 0.08f;
+        float endX = metrics.widthPixels * 0.86f;
 
         if (isLikelyProgressMarker(markerBounds)) {
             y = markerBounds.centerY();
             startX = Math.max(metrics.widthPixels * 0.08f, markerBounds.right + dp(6));
-            endX = Math.min(metrics.widthPixels * 0.94f, startX + metrics.widthPixels * 0.24f);
+            endX = Math.min(metrics.widthPixels * 0.94f, startX + metrics.widthPixels * 0.32f);
         }
 
-        Path path = new Path();
-        path.moveTo(startX, y);
-        path.lineTo(endX, y);
+        Diagnostics.action(this, reason + "：准备多策略拖动进度条");
+        dispatchSeekGesture(startX, endX, y, 0);
+        dispatchSeekGesture(metrics.widthPixels * 0.08f, metrics.widthPixels * 0.88f, metrics.heightPixels * 0.905f, 1100);
+        dispatchSeekGesture(metrics.widthPixels * 0.08f, metrics.widthPixels * 0.88f, metrics.heightPixels * 0.945f, 2200);
+    }
 
-        GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(path, 0, 420))
-                .build();
-        dispatchGesture(gesture, null, null);
+    private void dispatchSeekGesture(float startX, float endX, float y, long delayMs) {
+        handler.postDelayed(() -> {
+            Path path = new Path();
+            path.moveTo(startX, y);
+            path.lineTo(endX, y);
+
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(path, 120, 720))
+                    .build();
+            boolean accepted = dispatchGesture(gesture, null, null);
+            Diagnostics.action(this, "拖动进度条 y=" + Math.round(y) + " accepted=" + accepted);
+        }, delayMs);
     }
 
     private int dp(int value) {
