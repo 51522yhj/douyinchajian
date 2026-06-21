@@ -3,14 +3,20 @@ package com.yuhaojun.douyinadskipper;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityButtonController;
 import android.accessibilityservice.GestureDescription;
-import android.content.Intent;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -73,6 +79,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
     private long lastActionTime;
     private AccessibilityButtonController.AccessibilityButtonCallback accessibilityButtonCallback;
+    private ViewGroup diagnosticsOverlay;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -93,6 +100,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         unregisterAccessibilityShortcutButton();
+        hideDiagnosticsOverlay();
         Diagnostics.serviceState(this, "已停止");
         super.onDestroy();
     }
@@ -120,6 +128,11 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
             Diagnostics.scan(this, "抖音窗口可读，但 root 节点为空");
+            return;
+        }
+        Diagnostics.rootPackage(this, root.getPackageName());
+        if (!isTargetPackage(root.getPackageName())) {
+            Diagnostics.scan(this, "跳过扫描：当前活动窗口不是抖音，root=" + root.getPackageName());
             return;
         }
 
@@ -164,9 +177,11 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         accessibilityButtonCallback = new AccessibilityButtonController.AccessibilityButtonCallback() {
             @Override
             public void onClicked(AccessibilityButtonController controller) {
-                Intent intent = new Intent(DouyinAdSkipAccessibilityService.this, DiagnosticsActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                startActivity(intent);
+                try {
+                    toggleDiagnosticsOverlay();
+                } catch (Throwable throwable) {
+                    Diagnostics.error(DouyinAdSkipAccessibilityService.this, throwable);
+                }
             }
 
             @Override
@@ -178,6 +193,83 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
             }
         };
         controller.registerAccessibilityButtonCallback(accessibilityButtonCallback);
+    }
+
+    private void toggleDiagnosticsOverlay() {
+        if (diagnosticsOverlay == null) {
+            showDiagnosticsOverlay();
+        } else {
+            hideDiagnosticsOverlay();
+        }
+    }
+
+    private void showDiagnosticsOverlay() {
+        WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager == null) {
+            Diagnostics.action(this, "无法显示诊断浮层：WindowManager 不可用");
+            return;
+        }
+
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        panel.setBackgroundColor(0xEEFFFFFF);
+        scrollView.addView(panel, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        TextView content = new TextView(this);
+        content.setText(Diagnostics.readSummary(this));
+        content.setTextColor(0xFF18181B);
+        content.setTextSize(14);
+        content.setLineSpacing(0, 1.16f);
+        panel.addView(content, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        Button close = new Button(this);
+        close.setText("关闭诊断");
+        close.setOnClickListener(v -> hideDiagnosticsOverlay());
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        closeParams.setMargins(0, dp(10), 0, 0);
+        panel.addView(close, closeParams);
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                android.graphics.PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.BOTTOM;
+        params.height = Math.round(getResources().getDisplayMetrics().heightPixels * 0.45f);
+
+        diagnosticsOverlay = scrollView;
+        try {
+            windowManager.addView(diagnosticsOverlay, params);
+        } catch (Throwable throwable) {
+            diagnosticsOverlay = null;
+            Diagnostics.error(this, throwable);
+            return;
+        }
+        Diagnostics.action(this, "已显示诊断浮层");
+    }
+
+    private void hideDiagnosticsOverlay() {
+        if (diagnosticsOverlay == null) {
+            return;
+        }
+        WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (windowManager != null) {
+            windowManager.removeView(diagnosticsOverlay);
+        }
+        diagnosticsOverlay = null;
     }
 
     private void unregisterAccessibilityShortcutButton() {
@@ -266,8 +358,8 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
             return false;
         }
         DisplayMetrics metrics = getResources().getDisplayMetrics();
-        return bounds.centerY() > metrics.heightPixels * 0.65f
-                && bounds.height() < metrics.heightPixels * 0.18f
+        return bounds.centerY() > metrics.heightPixels * 0.86f
+                && bounds.height() < metrics.heightPixels * 0.08f
                 && bounds.width() < metrics.widthPixels * 0.9f;
     }
 
@@ -317,7 +409,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         float startX = metrics.widthPixels * 0.42f;
         float endX = metrics.widthPixels * 0.78f;
 
-        if (markerBounds != null && markerBounds.centerY() > metrics.heightPixels * 0.55f) {
+        if (isLikelyProgressMarker(markerBounds)) {
             y = markerBounds.centerY();
             startX = Math.max(metrics.widthPixels * 0.08f, markerBounds.right + dp(6));
             endX = Math.min(metrics.widthPixels * 0.94f, startX + metrics.widthPixels * 0.24f);

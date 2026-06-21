@@ -3,7 +3,7 @@
     <string name="app_name">抖音植入广告跳段辅助</string>
     <string name="accessibility_service_label">抖音植入广告跳段辅助</string>
     <string name="accessibility_service_description">识别视频进度条或章节中的推广内容、广告片段等标记，并自动尝试快进到下一个非推广片段。</string>
-    <string name="home_description">开启无障碍服务后，本工具会在抖音视频界面检测进度条/章节里的推广内容、广告片段、营销片段等标记，命中后尝试拖动进度条跳到该段之后。点击无障碍快捷按钮可打开最近一次扫描状态。</string>
+    <string name="home_description">开启无障碍服务后，本工具只在当前活动窗口确认为抖音时检测进度条/章节标记，命中后尝试拖动进度条跳到该段之后。点击无障碍快捷按钮可在当前画面显示最近一次扫描状态。</string>
     <string name="open_accessibility_settings">打开无障碍设置</string>
     <string name="open_app_settings">打开应用设置</string>
     <string name="refresh_diagnostics">刷新诊断信息</string>

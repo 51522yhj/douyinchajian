@@ -13,6 +13,7 @@ final class Diagnostics {
     private static final String KEY_LAST_TIME = "last_time";
     private static final String KEY_LAST_EVENT_PACKAGE = "last_event_package";
     private static final String KEY_LAST_TARGET_PACKAGE = "last_target_package";
+    private static final String KEY_LAST_ROOT_PACKAGE = "last_root_package";
     private static final String KEY_LAST_SCAN = "last_scan";
     private static final String KEY_LAST_ACTION = "last_action";
     private static final String KEY_LAST_ERROR = "last_error";
@@ -37,6 +38,13 @@ final class Diagnostics {
     static void targetEvent(Context context, CharSequence packageName) {
         prefs(context).edit()
                 .putString(KEY_LAST_TARGET_PACKAGE, packageName == null ? "未知" : packageName.toString())
+                .putString(KEY_LAST_TIME, now())
+                .apply();
+    }
+
+    static void rootPackage(Context context, CharSequence packageName) {
+        prefs(context).edit()
+                .putString(KEY_LAST_ROOT_PACKAGE, packageName == null ? "未知" : packageName.toString())
                 .putString(KEY_LAST_TIME, now())
                 .apply();
     }
@@ -73,6 +81,7 @@ final class Diagnostics {
                 + "时间: " + prefs.getString(KEY_LAST_TIME, "暂无") + "\n"
                 + "最近事件包名: " + prefs.getString(KEY_LAST_EVENT_PACKAGE, "暂无") + "\n"
                 + "最近抖音包名: " + prefs.getString(KEY_LAST_TARGET_PACKAGE, "暂无") + "\n"
+                + "最近窗口包名: " + prefs.getString(KEY_LAST_ROOT_PACKAGE, "暂无") + "\n"
                 + "扫描: " + prefs.getString(KEY_LAST_SCAN, "暂无") + "\n"
                 + "动作: " + prefs.getString(KEY_LAST_ACTION, "暂无") + "\n"
                 + "错误: " + prefs.getString(KEY_LAST_ERROR, "暂无");
