@@ -12,20 +12,28 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
     private TextView statusView;
+    private TextView diagnosticsView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        ScrollView scrollView = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.setPadding(dp(24), dp(36), dp(24), dp(24));
         root.setBackgroundColor(Color.rgb(250, 250, 250));
+        scrollView.setBackgroundColor(Color.rgb(250, 250, 250));
+        scrollView.addView(root, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
 
         TextView title = new TextView(this);
         title.setText(getString(R.string.app_name));
@@ -59,6 +67,29 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
+        diagnosticsView = new TextView(this);
+        diagnosticsView.setTextColor(Color.rgb(63, 63, 70));
+        diagnosticsView.setTextSize(14);
+        diagnosticsView.setLineSpacing(0, 1.18f);
+        diagnosticsView.setPadding(dp(12), dp(12), dp(12), dp(12));
+        diagnosticsView.setBackgroundColor(Color.rgb(244, 244, 245));
+        LinearLayout.LayoutParams diagnosticsParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        diagnosticsParams.setMargins(0, dp(14), 0, 0);
+        root.addView(diagnosticsView, diagnosticsParams);
+
+        Button refreshButton = new Button(this);
+        refreshButton.setText(R.string.refresh_diagnostics);
+        refreshButton.setOnClickListener(v -> updateStatus());
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        refreshParams.setMargins(0, dp(10), 0, 0);
+        root.addView(refreshButton, refreshParams);
+
         Button settingsButton = new Button(this);
         settingsButton.setText(R.string.open_accessibility_settings);
         settingsButton.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
@@ -83,7 +114,7 @@ public class MainActivity extends Activity {
         appButtonParams.setMargins(0, dp(10), 0, 0);
         root.addView(appSettingsButton, appButtonParams);
 
-        setContentView(root);
+        setContentView(scrollView);
     }
 
     @Override
@@ -97,6 +128,7 @@ public class MainActivity extends Activity {
         statusView.setText(enabled ? R.string.service_enabled : R.string.service_disabled);
         statusView.setTextColor(enabled ? Color.rgb(22, 101, 52) : Color.rgb(153, 27, 27));
         statusView.setBackgroundColor(enabled ? Color.rgb(220, 252, 231) : Color.rgb(254, 226, 226));
+        diagnosticsView.setText(Diagnostics.readSummary(this));
     }
 
     private boolean isAccessibilityServiceEnabled() {

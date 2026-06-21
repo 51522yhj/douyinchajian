@@ -67,7 +67,36 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || !isTargetPackage(event.getPackageName())) {
+        try {
+            handleAccessibilityEvent(event);
+        } catch (Throwable throwable) {
+            Diagnostics.error(this, throwable);
+        }
+    }
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        Diagnostics.serviceState(this, "已连接");
+    }
+
+    @Override
+    public void onDestroy() {
+        Diagnostics.serviceState(this, "已停止");
+        super.onDestroy();
+    }
+
+    private void handleAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null) {
+            return;
+        }
+        CharSequence packageName = event.getPackageName();
+        if (packageName == null || getPackageName().contentEquals(packageName)) {
+            return;
+        }
+        Diagnostics.event(this, packageName);
+
+        if (!isTargetPackage(packageName)) {
             return;
         }
 
@@ -78,33 +107,44 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
+            Diagnostics.scan(this, "抖音窗口可读，但 root 节点为空");
             return;
         }
 
-        if (clickIfSkipButtonExists(root)) {
+        NodeBudget clickBudget = new NodeBudget(MAX_NODES_TO_SCAN);
+        if (clickIfSkipButtonExists(root, clickBudget)) {
             lastActionTime = now;
+            Diagnostics.action(this, "点击跳过/关闭广告按钮");
             return;
         }
 
         DetectionResult result = new DetectionResult();
         collectSignals(root, result);
+        Diagnostics.scan(this, result.summary());
         if (result.hasPromotionChapter()) {
             lastActionTime = now;
             seekPastPromotionChapter(result.markerBounds);
+            Diagnostics.action(this, "检测到章节推广标记，拖动进度条");
         }
     }
 
     @Override
     public void onInterrupt() {
-        // No persistent work to cancel.
+        Diagnostics.serviceState(this, "被系统中断");
     }
 
     private boolean isTargetPackage(CharSequence packageName) {
-        return packageName != null && DOUYIN_PACKAGES.contains(packageName.toString());
+        if (packageName == null) {
+            return false;
+        }
+        String value = packageName.toString().toLowerCase(Locale.ROOT);
+        return DOUYIN_PACKAGES.contains(value)
+                || value.contains("aweme")
+                || value.contains("douyin");
     }
 
-    private boolean clickIfSkipButtonExists(AccessibilityNodeInfo node) {
-        if (node == null) {
+    private boolean clickIfSkipButtonExists(AccessibilityNodeInfo node, NodeBudget budget) {
+        if (node == null || !budget.take()) {
             return false;
         }
 
@@ -118,7 +158,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         int childCount = node.getChildCount();
         for (int i = 0; i < childCount; i++) {
-            if (clickIfSkipButtonExists(node.getChild(i))) {
+            if (clickIfSkipButtonExists(node.getChild(i), budget)) {
                 return true;
             }
         }
@@ -144,9 +184,11 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
                 if (!bounds.isEmpty()) {
                     result.markerBounds = bounds;
                 }
+                result.addSample(label);
             }
             if (hasChapterContext) {
                 result.hasSeenChapterContext = true;
+                result.addSample(label);
             }
         }
 
@@ -237,9 +279,46 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         int promotionChapterCount;
         boolean hasSeenChapterContext;
         Rect markerBounds;
+        private final StringBuilder samples = new StringBuilder();
 
         boolean hasPromotionChapter() {
             return promotionChapterCount > 0;
+        }
+
+        void addSample(String label) {
+            if (samples.length() > 90 || label == null || label.isEmpty()) {
+                return;
+            }
+            if (samples.length() > 0) {
+                samples.append(" | ");
+            }
+            samples.append(label);
+        }
+
+        String summary() {
+            String marker = markerBounds == null ? "无坐标" : markerBounds.flattenToString();
+            String sampleText = samples.length() == 0 ? "无" : samples.toString();
+            return "扫描节点 " + scannedNodes
+                    + "，章节上下文 " + (hasSeenChapterContext ? "有" : "无")
+                    + "，推广章节 " + promotionChapterCount
+                    + "，标记坐标 " + marker
+                    + "，样本 " + sampleText;
+        }
+    }
+
+    private static class NodeBudget {
+        private int remaining;
+
+        NodeBudget(int remaining) {
+            this.remaining = remaining;
+        }
+
+        boolean take() {
+            if (remaining <= 0) {
+                return false;
+            }
+            remaining--;
+            return true;
         }
     }
 }

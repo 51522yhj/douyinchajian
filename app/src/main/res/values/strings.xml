@@ -6,6 +6,7 @@
     <string name="home_description">开启无障碍服务后，本工具会在抖音视频界面检测进度条/章节里的推广内容、广告片段、营销片段等标记，命中后尝试拖动进度条跳到该段之后。</string>
     <string name="open_accessibility_settings">打开无障碍设置</string>
     <string name="open_app_settings">打开应用设置</string>
+    <string name="refresh_diagnostics">刷新诊断信息</string>
     <string name="service_enabled">服务状态：已开启</string>
     <string name="service_disabled">服务状态：未开启</string>
 </resources>
