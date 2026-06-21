@@ -14,45 +14,63 @@ import java.util.Locale;
 import java.util.Set;
 
 public class DouyinAdSkipAccessibilityService extends AccessibilityService {
-    private static final long ACTION_COOLDOWN_MS = 2600L;
-    private static final int MAX_NODES_TO_SCAN = 180;
+    private static final long ACTION_COOLDOWN_MS = 9000L;
+    private static final int MAX_NODES_TO_SCAN = 220;
 
     private static final Set<String> DOUYIN_PACKAGES = new HashSet<>(Arrays.asList(
             "com.ss.android.ugc.aweme",
             "com.ss.android.ugc.aweme.lite"
     ));
 
-    private static final String[] EXACT_AD_LABELS = {
-            "广告",
-            "视频广告",
-            "品牌广告",
-            "推广",
-            "赞助",
-            "广告详情"
-    };
-
-    private static final String[] COMMERCIAL_KEYWORDS = {
-            "广告",
-            "推广",
-            "赞助",
-            "品牌合作",
-            "商业合作",
-            "达人推荐",
-            "立即下载",
-            "立即安装",
-            "查看详情",
-            "了解详情",
-            "去看看",
-            "进店看看",
-            "进入店铺",
-            "立即购买",
-            "领券购买"
-    };
-
     private static final String[] SKIP_BUTTON_KEYWORDS = {
+            "跳过广告",
             "跳过",
-            "关闭广告",
-            "关闭推广"
+            "关闭广告"
+    };
+
+    private static final String[] STRONG_EMBEDDED_AD_KEYWORDS = {
+            "广告时间",
+            "本视频由",
+            "赞助播出",
+            "感谢赞助",
+            "品牌赞助",
+            "品牌合作",
+            "商务合作",
+            "商业合作",
+            "恰饭",
+            "接个广告",
+            "口播",
+            "小黄车",
+            "购物车",
+            "商品链接",
+            "购买链接",
+            "链接在下方",
+            "点击左下角",
+            "点击右下角",
+            "官方旗舰店",
+            "直播间同款"
+    };
+
+    private static final String[] WEAK_PROMOTION_KEYWORDS = {
+            "领券",
+            "优惠券",
+            "下单",
+            "购买",
+            "入手",
+            "同款",
+            "旗舰店",
+            "咨询",
+            "私信",
+            "课程",
+            "套餐",
+            "下载",
+            "安装",
+            "注册",
+            "试用",
+            "活动价",
+            "限时",
+            "福利",
+            "链接"
     };
 
     private long lastActionTime;
@@ -80,9 +98,9 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         DetectionResult result = new DetectionResult();
         collectSignals(root, result);
-        if (result.shouldSkip()) {
+        if (result.shouldSeekForward()) {
             lastActionTime = now;
-            swipeToNextVideo();
+            seekForwardInCurrentVideo();
         }
     }
 
@@ -125,11 +143,11 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
 
         String label = normalizeText(node);
         if (!label.isEmpty()) {
-            if (matchesExactAdLabel(label)) {
-                result.hasAdLabel = true;
+            if (containsAny(label, STRONG_EMBEDDED_AD_KEYWORDS)) {
+                result.strongSignalCount++;
             }
-            if (containsAny(label, COMMERCIAL_KEYWORDS)) {
-                result.commercialSignalCount++;
+            if (containsAny(label, WEAK_PROMOTION_KEYWORDS)) {
+                result.weakSignalCount++;
             }
         }
 
@@ -137,16 +155,6 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         for (int i = 0; i < childCount; i++) {
             collectSignals(node.getChild(i), result);
         }
-    }
-
-    private boolean matchesExactAdLabel(String label) {
-        String compact = label.replace(" ", "");
-        for (String adLabel : EXACT_AD_LABELS) {
-            if (compact.equals(adLabel) || compact.startsWith(adLabel + "·") || compact.startsWith(adLabel + "|")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean containsAny(String label, String[] keywords) {
@@ -189,29 +197,29 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         return null;
     }
 
-    private void swipeToNextVideo() {
+    private void seekForwardInCurrentVideo() {
         DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float startX = metrics.widthPixels * 0.5f;
-        float startY = metrics.heightPixels * 0.76f;
-        float endY = metrics.heightPixels * 0.24f;
+        float y = metrics.heightPixels * 0.91f;
+        float startX = metrics.widthPixels * 0.42f;
+        float endX = metrics.widthPixels * 0.78f;
 
         Path path = new Path();
-        path.moveTo(startX, startY);
-        path.lineTo(startX, endY);
+        path.moveTo(startX, y);
+        path.lineTo(endX, y);
 
         GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(path, 0, 240))
+                .addStroke(new GestureDescription.StrokeDescription(path, 0, 420))
                 .build();
         dispatchGesture(gesture, null, null);
     }
 
     private static class DetectionResult {
         int scannedNodes;
-        int commercialSignalCount;
-        boolean hasAdLabel;
+        int strongSignalCount;
+        int weakSignalCount;
 
-        boolean shouldSkip() {
-            return hasAdLabel || commercialSignalCount >= 2;
+        boolean shouldSeekForward() {
+            return strongSignalCount >= 1 || weakSignalCount >= 2;
         }
     }
 }
