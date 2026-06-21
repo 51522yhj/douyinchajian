@@ -11,7 +11,8 @@ final class Diagnostics {
     private static final String PREFS_NAME = "diagnostics";
     private static final String KEY_SERVICE_STATE = "service_state";
     private static final String KEY_LAST_TIME = "last_time";
-    private static final String KEY_LAST_PACKAGE = "last_package";
+    private static final String KEY_LAST_EVENT_PACKAGE = "last_event_package";
+    private static final String KEY_LAST_TARGET_PACKAGE = "last_target_package";
     private static final String KEY_LAST_SCAN = "last_scan";
     private static final String KEY_LAST_ACTION = "last_action";
     private static final String KEY_LAST_ERROR = "last_error";
@@ -28,7 +29,14 @@ final class Diagnostics {
 
     static void event(Context context, CharSequence packageName) {
         prefs(context).edit()
-                .putString(KEY_LAST_PACKAGE, packageName == null ? "未知" : packageName.toString())
+                .putString(KEY_LAST_EVENT_PACKAGE, packageName == null ? "未知" : packageName.toString())
+                .putString(KEY_LAST_TIME, now())
+                .apply();
+    }
+
+    static void targetEvent(Context context, CharSequence packageName) {
+        prefs(context).edit()
+                .putString(KEY_LAST_TARGET_PACKAGE, packageName == null ? "未知" : packageName.toString())
                 .putString(KEY_LAST_TIME, now())
                 .apply();
     }
@@ -36,6 +44,7 @@ final class Diagnostics {
     static void scan(Context context, String summary) {
         prefs(context).edit()
                 .putString(KEY_LAST_SCAN, summary)
+                .putString(KEY_LAST_ACTION, "未命中章节推广标记")
                 .putString(KEY_LAST_TIME, now())
                 .apply();
     }
@@ -62,7 +71,8 @@ final class Diagnostics {
         SharedPreferences prefs = prefs(context);
         return "服务: " + prefs.getString(KEY_SERVICE_STATE, "未连接") + "\n"
                 + "时间: " + prefs.getString(KEY_LAST_TIME, "暂无") + "\n"
-                + "最近包名: " + prefs.getString(KEY_LAST_PACKAGE, "暂无") + "\n"
+                + "最近事件包名: " + prefs.getString(KEY_LAST_EVENT_PACKAGE, "暂无") + "\n"
+                + "最近抖音包名: " + prefs.getString(KEY_LAST_TARGET_PACKAGE, "暂无") + "\n"
                 + "扫描: " + prefs.getString(KEY_LAST_SCAN, "暂无") + "\n"
                 + "动作: " + prefs.getString(KEY_LAST_ACTION, "暂无") + "\n"
                 + "错误: " + prefs.getString(KEY_LAST_ERROR, "暂无");

@@ -1,13 +1,16 @@
 package com.yuhaojun.douyinadskipper;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityButtonController;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Toast;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -64,6 +67,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     };
 
     private long lastActionTime;
+    private AccessibilityButtonController.AccessibilityButtonCallback accessibilityButtonCallback;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -78,10 +82,12 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         Diagnostics.serviceState(this, "已连接");
+        registerAccessibilityShortcutButton();
     }
 
     @Override
     public void onDestroy() {
+        unregisterAccessibilityShortcutButton();
         Diagnostics.serviceState(this, "已停止");
         super.onDestroy();
     }
@@ -99,6 +105,7 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
         if (!isTargetPackage(packageName)) {
             return;
         }
+        Diagnostics.targetEvent(this, packageName);
 
         long now = SystemClock.uptimeMillis();
         if (now - lastActionTime < ACTION_COOLDOWN_MS) {
@@ -131,6 +138,50 @@ public class DouyinAdSkipAccessibilityService extends AccessibilityService {
     @Override
     public void onInterrupt() {
         Diagnostics.serviceState(this, "被系统中断");
+    }
+
+    private void registerAccessibilityShortcutButton() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Diagnostics.action(this, "系统版本不支持无障碍快捷按钮回调");
+            return;
+        }
+
+        AccessibilityButtonController controller = getAccessibilityButtonController();
+        if (controller == null) {
+            Diagnostics.action(this, "无障碍快捷按钮不可用");
+            return;
+        }
+
+        accessibilityButtonCallback = new AccessibilityButtonController.AccessibilityButtonCallback() {
+            @Override
+            public void onClicked(AccessibilityButtonController controller) {
+                Toast.makeText(
+                        DouyinAdSkipAccessibilityService.this,
+                        Diagnostics.readSummary(DouyinAdSkipAccessibilityService.this),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+
+            @Override
+            public void onAvailabilityChanged(AccessibilityButtonController controller, boolean available) {
+                Diagnostics.action(
+                        DouyinAdSkipAccessibilityService.this,
+                        available ? "无障碍快捷按钮可用" : "无障碍快捷按钮不可用"
+                );
+            }
+        };
+        controller.registerAccessibilityButtonCallback(accessibilityButtonCallback);
+    }
+
+    private void unregisterAccessibilityShortcutButton() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || accessibilityButtonCallback == null) {
+            return;
+        }
+        AccessibilityButtonController controller = getAccessibilityButtonController();
+        if (controller != null) {
+            controller.unregisterAccessibilityButtonCallback(accessibilityButtonCallback);
+        }
+        accessibilityButtonCallback = null;
     }
 
     private boolean isTargetPackage(CharSequence packageName) {
